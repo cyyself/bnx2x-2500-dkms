@@ -24,6 +24,7 @@
 #include <linux/interrupt.h>
 #include <linux/ip.h>
 #include <linux/crash_dump.h>
+#include <linux/version.h>
 #include <net/tcp.h>
 #include <net/gro.h>
 #include <net/ipv6.h>
@@ -676,11 +677,14 @@ static struct sk_buff *
 bnx2x_build_skb(const struct bnx2x_fastpath *fp, void *data)
 {
 	struct sk_buff *skb;
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,3,0)
 	if (fp->rx_frag_size)
 		skb = build_skb(data, fp->rx_frag_size);
 	else
 		skb = slab_build_skb(data);
+#else
+	skb = build_skb(data, fp->rx_frag_size);
+#endif
 	return skb;
 }
 

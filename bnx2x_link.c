@@ -151,6 +151,7 @@ typedef int (*read_sfp_module_eeprom_func_p)(struct bnx2x_phy *phy,
 
 #define SFP_EEPROM_CON_TYPE_ADDR		0x2
 	#define SFP_EEPROM_CON_TYPE_VAL_UNKNOWN	0x0
+	#define SFP_EEPROM_CON_TYPE_VAL_SC	0x1
 	#define SFP_EEPROM_CON_TYPE_VAL_LC	0x7
 	#define SFP_EEPROM_CON_TYPE_VAL_COPPER	0x21
 	#define SFP_EEPROM_CON_TYPE_VAL_RJ45	0x22
@@ -8174,6 +8175,7 @@ static int bnx2x_get_edc_mode(struct bnx2x_phy *phy,
 		break;
 	}
 	case SFP_EEPROM_CON_TYPE_VAL_UNKNOWN:
+	case SFP_EEPROM_CON_TYPE_VAL_SC:
 	case SFP_EEPROM_CON_TYPE_VAL_LC:
 	case SFP_EEPROM_CON_TYPE_VAL_RJ45:
 		check_limiting_mode = 1;
@@ -8184,7 +8186,8 @@ static int bnx2x_get_edc_mode(struct bnx2x_phy *phy,
 		    (val[SFP_EEPROM_1G_COMP_CODE_ADDR] != 0)) {
 			DP(NETIF_MSG_LINK, "1G SFP module detected\n");
 			phy->media_type = ETH_PHY_SFP_1G_FIBER;
-			if (phy->req_line_speed != SPEED_1000) {
+			if (phy->req_line_speed != SPEED_1000 &&
+				phy->req_line_speed != SPEED_2500) {
 				u8 gport = params->port;
 				phy->req_line_speed = SPEED_1000;
 				if (!CHIP_IS_E1x(bp)) {
@@ -9238,6 +9241,7 @@ static void bnx2x_8727_config_speed(struct bnx2x_phy *phy,
 	u16 tmp1, val;
 	/* Set option 1G speed */
 	if ((phy->req_line_speed == SPEED_1000) ||
+		(phy->req_line_speed == SPEED_2500) ||
 	    (phy->media_type == ETH_PHY_SFP_1G_FIBER)) {
 		DP(NETIF_MSG_LINK, "Setting 1G force\n");
 		bnx2x_cl45_write(bp, phy,
@@ -9247,6 +9251,22 @@ static void bnx2x_8727_config_speed(struct bnx2x_phy *phy,
 		bnx2x_cl45_read(bp, phy,
 				MDIO_PMA_DEVAD, MDIO_PMA_REG_10G_CTRL2, &tmp1);
 		DP(NETIF_MSG_LINK, "1.7 = 0x%x\n", tmp1);
+		if ((phy->req_line_speed == SPEED_2500) &&
+			(phy->speed_cap_mask &
+			(PORT_HW_CFG_SPEED_CAPABILITY_D0_1G |
+			PORT_HW_CFG_SPEED_CAPABILITY_D0_2_5G))) {
+			bnx2x_cl45_read_and_write(bp, phy,
+				 MDIO_AN_DEVAD,
+				 MDIO_AN_REG_8727_MISC_CTRL,
+				 ~(1<<5));
+			bnx2x_cl45_write(bp, phy,
+				 MDIO_AN_DEVAD,
+				 MDIO_AN_REG_8727_MISC_CTRL1, 0x0010);
+		} else {
+			bnx2x_cl45_write(bp, phy,
+				 MDIO_AN_DEVAD,
+				 MDIO_AN_REG_8727_MISC_CTRL1, 0x001C);
+		}
 		/* Power down the XAUI until link is up in case of dual-media
 		 * and 1G
 		 */
@@ -9278,6 +9298,9 @@ static void bnx2x_8727_config_speed(struct bnx2x_phy *phy,
 		bnx2x_cl45_write(bp, phy,
 				 MDIO_AN_DEVAD, MDIO_AN_REG_8727_MISC_CTRL,
 				 0x0020);
+		bnx2x_cl45_write(bp, phy,
+				 MDIO_AN_DEVAD, MDIO_AN_REG_8727_MISC_CTRL1,
+				 0x001C);
 		bnx2x_cl45_write(bp, phy,
 				 MDIO_AN_DEVAD, MDIO_AN_REG_CL37_AN, 0x0100);
 		bnx2x_cl45_write(bp, phy,
@@ -9566,6 +9589,11 @@ static u8 bnx2x_8727_read_status(struct bnx2x_phy *phy,
 		link_up = 1;
 		vars->line_speed = SPEED_10000;
 		DP(NETIF_MSG_LINK, "port %x: External link up in 10G\n",
+			   params->port);
+	} else if ((link_status & (1<<1)) && (!(link_status & (1<<14)))) {
+		link_up = 1;
+		vars->line_speed = SPEED_2500;
+		DP(NETIF_MSG_LINK, "port %x: External link up in 2.5G\n",
 			   params->port);
 	} else if ((link_status & (1<<0)) && (!(link_status & (1<<13)))) {
 		link_up = 1;
@@ -11908,6 +11936,7 @@ static const struct bnx2x_phy phy_8727 = {
 	.tx_preemphasis	= {0xffff, 0xffff, 0xffff, 0xffff},
 	.mdio_ctrl	= 0,
 	.supported	= (SUPPORTED_10000baseT_Full |
+			   SUPPORTED_2500baseX_Full |
 			   SUPPORTED_1000baseT_Full |
 			   SUPPORTED_FIBRE |
 			   SUPPORTED_Pause |

@@ -7170,6 +7170,7 @@ Theotherbitsarereservedandshouldbezero*/
 #define MDIO_PMA_REG_8727_OPT_CFG_REG		0xc8e4
 
 #define MDIO_AN_REG_8727_MISC_CTRL		0x8309
+#define MDIO_AN_REG_8727_MISC_CTRL1		0x8308
 
 #define MDIO_PMA_REG_8073_CHIP_REV			0xc801
 #define MDIO_PMA_REG_8073_SPEED_LINK_STATUS		0xc820
